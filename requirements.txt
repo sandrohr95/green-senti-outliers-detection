@@ -1,0 +1,45 @@
+mgrs==1.4.5
+minio==7.1.11
+sentinelsat==1.1.1
+pymongo==4.2.0
+pydantic==1.10.2
+pandas
+numpy==1.23.3
+#pyproj
+pyproj==3.4.0
+rasterio==1.3a3
+Shapely==1.8.4
+geopandas==0.11.1
+bs4==0.0.1
+matplotlib==3.5.3
+#streamlit~=1.12.2
+streamlit
+streamlit-folium
+GDAL
+scrapy
+mpld3~=0.5.7
+folium
+--find-links=https://girder.github.io/large_image_wheels GDAL
+# cartopy
+# geemap
+#geopandas
+#jupyter-server-proxy
+#keplergl
+#leafmap
+#localtileserver
+#nbserverproxy
+#owslib
+#palettable
+#plotly
+#streamlit==1.12.2
+#streamlit-bokeh-events
+#streamlit-folium
+#streamlit-keplergl
+#tropycal
+# git+https://github.com/giswqs/leafmap
+# git+https://github.com/giswqs/geemap
+
+
+#urllib3~=1.26.14
+#beautifulsoup4~=4.11.1
+#folium~=0.14.0
