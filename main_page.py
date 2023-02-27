@@ -6,6 +6,8 @@ from folium.raster_layers import ImageOverlay
 import streamlit as st
 from streamlit_folium import st_folium, folium_static
 from pathlib import Path
+
+from main import execute_workflow
 from src.productimeseries.config import settings
 from src.productimeseries.mongo import MongoConnection
 # from src.productimeseries.utilities.outlier_detection import get_time_series_from_products_mongo
@@ -33,9 +35,12 @@ if "geojson" not in st.session_state:
 if "index" not in st.session_state:
     st.session_state["index"] = "Choose Index"
 if "start_date" not in st.session_state:
-    st.session_state["start_date"] = datetime.date(2018, 2, 8)
+    # st.session_state["start_date"] = datetime.date(2018, 2, 8)
+    st.session_state["start_date"] = "2018-03-30"
+
 if "end_date" not in st.session_state:
-    st.session_state["end_date"] = datetime.date(2023, 1, 20)
+    # st.session_state["end_date"] = datetime.date(2023, 1, 20)
+    st.session_state["end_date"] = "2025-04-20"
 if "warning" not in st.session_state:
     st.session_state["warning"] = False
 if "anomalies" not in st.session_state:
@@ -49,8 +54,9 @@ if "outlier_date" not in st.session_state:
 
 # GENERATE FORM
 with st.sidebar.form(key="my_form"):
-    list_geojson = ['Choose Zone', 'Campo de futbol', 'Bulevar']
-    list_index = ['Choose Index', 'ndvi', 'tci', 'ri', 'cri1', 'bri', 'mndwi']
+    list_geojson = ['Choose Zone', 'Campo de futbol', 'Bulevar', 'Jardin Botanico']
+    list_index = ['Choose Index', 'ndvi', 'tci', 'ri', 'cri1', 'bri','classifier', 'moisture',
+                  'evi', 'osavi', 'evi2', 'ndre', 'ndyi', 'bri', 'ndsi', 'ndwi', 'mndwi', 'bsi']
     st.session_state["geojson"] = st.selectbox(
         'Which place do you want to study?',
         list_geojson
@@ -60,15 +66,15 @@ with st.sidebar.form(key="my_form"):
         list_index
     )
 
-    st.session_state["start_date"] = st.date_input(
-        label="Select a date",
-        value=st.session_state["start_date"],
-        min_value=datetime.date(2018, 1, 8))
-
-    st.session_state["end_date"] = st.date_input(
-        "Select a end date",
-        st.session_state["end_date"],
-        max_value=datetime.date(2023, 1, 21))
+    # st.session_state["start_date"] = st.date_input(
+    #     label="Select a date",
+    #     value=st.session_state["start_date"],
+    #     min_value=datetime.date(2018, 1, 8))
+    #
+    # st.session_state["end_date"] = st.date_input(
+    #     "Select a end date",
+    #     st.session_state["end_date"],
+    #     max_value=datetime.date(2023, 1, 21))
 
     submit_button = st.form_submit_button(label="Detect Outliers", help="Submit Button")
 
@@ -76,24 +82,18 @@ with st.sidebar.form(key="my_form"):
         if st.session_state["geojson"] == 'Choose Zone' or st.session_state["index"] == 'Choose Index':
             st.session_state["warning"] = True
         else:
-            # Establish Mongo Connection and set to Time Series collection in MongoBD
-            name_mongo_collection = settings.MONGO_TIMESERIES_COLLECTION
-            mongo_client = MongoConnection()
-            mongo_client.set_collection(name_mongo_collection)
-            mongo_collection = mongo_client.get_collection_object()
-
-            st.session_state.df = get_time_series_from_products_mongo(mongo_collection,
-                                                                      st.session_state["geojson"],
-                                                                      st.session_state["index"],
-                                                                      st.session_state["start_date"],
-                                                                      st.session_state["end_date"])
-            # st.session_state["outliers"] = find_outliers_iqr(st.session_state.df)
-            st.session_state["warning"] = False
+            with st.spinner('Updating time-series data in the database ...'):
+                st.session_state.df = execute_workflow(st.session_state["geojson"],
+                                                       st.session_state["start_date"],
+                                                       st.session_state["end_date"],
+                                                       st.session_state["index"])
+                # st.session_state["outliers"] = find_outliers_iqr(st.session_state.df)
+                st.session_state["warning"] = False
 
 
 # Function to generate a Map Visualization
 def generate_map() -> folium.Map:
-    map_folium = folium.Map(location=st.session_state["center"], zoom_start=17,
+    map_folium = folium.Map(location=st.session_state["center"], zoom_start=18,
                             tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
                             attr='Satellite attribution')
     Draw(
@@ -168,11 +168,11 @@ def execute_outliers_detection():
     n = len(column)
     st.session_state["outlier_date"] = data.index
     # parameters
-    window_percentage = 2
+    window_percentage = 3
     k = int(len(column) * (window_percentage / 100))
     # column = column.to_numpy()
     get_bands = lambda data: (np.mean(data) + 3 * np.std(data), np.mean(data) - 3 * np.std(data))
-    # get_bands = lambda data: (np.mean(data) + np.nanquantile(data, 0.1), np.mean(data) - np.nanquantile(data, 0.99))
+    # get_bands = lambda data: (np.mean(data) + np.nanquantile(data, 0.99), np.mean(data) - np.nanquantile(data, 0.99))
     bands = [get_bands(column[range(0 if i - k < 0 else i - k, i + k if i + k < n else n)]) for i in range(0, n)]
     st.session_state['upper_detection'], st.session_state['lower_detection'] = zip(*bands)
     # compute local outliers
@@ -234,7 +234,7 @@ if st.session_state["warning"]:
     st.warning("WARNING: Please enter the required fields", icon="⚠️")
     home_page()
 elif not st.session_state.df.empty:
-    with st.spinner('Wait for it...'):
+    with st.spinner('Outlier Detection Wait for it...'):
         # First Detect Outliers
         execute_outliers_detection()
         # st.write(st.session_state.df.index)
@@ -243,23 +243,25 @@ elif not st.session_state.df.empty:
         col1, col2 = st.columns(2)
         # IF WE FIND OUTLIERS WE DOWNLOAD THE TIF FROM THIS DATE TO GENERATE THE CENTER MAP ANS SHOW THE INDEX IMAGE
         if np.any(st.session_state["anomalies"] == True):
+            last_outlier_date = str(st.session_state["outlier_date"][st.session_state["anomalies"]][0])
+            number_of_outliers = len(st.session_state["outlier_date"][st.session_state["anomalies"]])
             with col1:
                 st.write('#### Time Series Visualization')
                 st.line_chart(st.session_state.df, height=280)
+                st.error('We detect ' + str(number_of_outliers) + ' outliers. The last one was: ' + last_outlier_date,
+                         icon="🚨")
                 st.write("##### Time Series Outlier Detection")
                 # Here we plot time series detection
                 print_outliers_time_series()
             with col2:
                 st.write("#### Map Visualization of " + st.session_state["geojson"])
-                last_outlier_date = str(st.session_state["outlier_date"][st.session_state["anomalies"]][0])
                 # Show outliers in map
                 sample_band_cut_path = download_specific_tif_from_minio(last_outlier_date, outliers=True)
                 # Explanation of the results
                 with st.expander("Get More Information"):
                     "###### Statistical Information"
                     st.write("The last outlier was the day: " + last_outlier_date)
-                    st.write('Number of outliers: ' + str(
-                        len(st.session_state["outlier_date"][st.session_state["anomalies"]])))
+                    st.write('Number of outliers: ' + str(number_of_outliers))
                     "###### Download Image"
                     st.write(
                         "You can download the index of the last outlier found in the time series analysis in the "

@@ -44,7 +44,7 @@ class _Settings(BaseSettings):
 
 
     # Directory containing validated datasets (.kmz or .geojson)
-    DB_DIR: str = "/data"
+    DB_DIR: str = "/home/sandro/PycharmProjects/geojson"
 
     # For running in a distributed environment
     DASK_CLUSTER_IP: str = "0.0.0.0.0:0000"

@@ -96,29 +96,31 @@ def get_products_by_tile_and_date(
     return product_metadata_cursor
 
 
-def get_time_series_from_products_mongo(mongo_collection: Collection, name_geojson: str, index_name: str, start_date: str, end_date: str):
+def get_time_series_from_products_mongo(mongo_collection: Collection, name_geojson: str, index_name: str,
+                                        start_date: str, end_date: str):
     """ Get time series index from specific geojson file and a range of dates
         by default we have processed Teatinos and Ejido
     """
-    # From geojson path take the name of the geojson file. Ex: Teatinos
-    # name_geojson = geojson_file.split('/')[-1].split('.')[0]
-    print(name_geojson)
-    # query between start and final date
-    query = {'id_geojson': name_geojson, index_name: {'$exists': True},
-             'date': {"$gt": dt.strptime(str(start_date), '%Y-%m-%d'),
-                      "$lt": dt.strptime(str(end_date), '%Y-%m-%d')},
-             }
-    # return only the index values and dates
-    documents = mongo_collection.find(query, {index_name: 1, 'date': -1})
-    list_index = []
-    list_dates = []
-    for d in documents:
-        list_index.append(d[index_name])
-        list_dates.append(d['date'])
 
-    dataframe = pd.DataFrame(list_index, columns=[index_name], index=list_dates)
-    return dataframe
+    timeseries_metadata_cursor = mongo_collection.aggregate(
+        [
+            {
+                "$match": {
+                    'id_geojson': name_geojson,
+                    index_name: {'$exists': True},
+                    "date": {
+                        "$gte": dt.strptime(str(start_date), '%Y-%m-%d'),
+                        "$lte": dt.strptime(str(end_date), '%Y-%m-%d')},
+                }
+            },
+            {
+                "$sort": {"date": -1}
+            },
+        ]
+    )
 
+
+    return list(timeseries_metadata_cursor)
 
 
 def _download_sample_band_from_product_list(
