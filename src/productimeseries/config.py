@@ -37,9 +37,6 @@ class _Settings(BaseSettings):
 
     # Temporal directory
     TMP_DIR: str = "./tmp"
-    TMP_DIR_CUT: str = "/home/sandro/PycharmProjects/tmp/cut"
-    TMP_DIR_PNG: str = "/home/sandro/PycharmProjects/tmp/png"
-
     # Directory containing validated datasets (.kmz or .geojson)
     DB_DIR: str = "./geojson"
 

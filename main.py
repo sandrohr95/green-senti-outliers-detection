@@ -138,9 +138,15 @@ def download_tif_from_minio(geojson_path, geojson_name, index, list_products, ti
 
 
 if __name__ == '__main__':
+    from statsmodels.tsa.seasonal import seasonal_decompose
+    import matplotlib.dates as mdates
+    import matplotlib.pyplot as plt
+
     geojson_files = ['Jardin Botanico']  # , path_geojson+'/Campo de futbol.geojson'
     indexes = ['ndvi']  # , 'ndvi', 'tci', 'ri', 'cri1', 'bri', 'mndwi'
-    # main(geojson_files, "2018-03-26", "2022-07-28", 'ndvi')
-    for ind in indexes:
-        for g in geojson_files:
-            execute_workflow(g, "2018-03-26", "2029-02-19", ind)
+
+    df = execute_workflow(geojson_files[0], "2018-03-26", "2029-02-19", indexes[0])
+    df.sort_index(inplace=True)
+    print(df)
+    df.to_csv("/home/sandro/PycharmProjects/ndvi.csv")
+

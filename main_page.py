@@ -9,12 +9,14 @@ from pathlib import Path
 
 from main import execute_workflow
 from src.productimeseries.config import settings
-from src.productimeseries.mongo import MongoConnection
-# from src.productimeseries.utilities.outlier_detection import get_time_series_from_products_mongo
 from src.productimeseries.utilities.raster_conversion import _get_corners_raster, save_band_as_png
 from src.productimeseries.utilities.utils import get_specific_tif_from_minio, get_time_series_from_products_mongo
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.covariance import EllipticEnvelope
+from sklearn.ensemble import IsolationForest
 
 st.set_page_config(
     page_title="Generate Alerts in Time Series indexes from GeoJson",
@@ -180,6 +182,30 @@ def execute_outliers_detection():
             column < st.session_state['lower_detection'])
 
 
+def isolation_forest_outliers():
+    df = st.session_state.df
+    outliers_fraction = float(.01)
+    scaler = StandardScaler()
+    np_scaled = scaler.fit_transform(df.values.reshape(-1, 1))
+    data = pd.DataFrame(np_scaled)
+    # train isolation forest
+    model = IsolationForest(contamination=outliers_fraction, n_estimators=200)  #
+    model.fit(data)
+
+    ### PLOT ANOMALIES
+    index = st.session_state['index']
+    df['anomaly'] = model.predict(data)
+    # visualization
+    fig, ax = plt.subplots(figsize=(28, 10))
+    plt.xticks(fontsize=24)
+    plt.yticks(fontsize=24)
+    a = df.loc[df['anomaly'] == -1, [index]]  # anomaly
+    ax.plot(df.index, df[index], color='black', label='Normal')
+    ax.scatter(a.index, a[index], color='red', label='Anomaly')
+    plt.legend(fontsize=24)
+    st.pyplot(fig)
+
+
 def print_outliers_time_series():
     # plotting...
     fig = plt.figure(figsize=(28, 10))
@@ -253,6 +279,7 @@ elif not st.session_state.df.empty:
                 st.write("##### Time Series Outlier Detection")
                 # Here we plot time series detection
                 print_outliers_time_series()
+                # isolation_forest_outliers()
             with col2:
                 st.write("#### Map Visualization of " + st.session_state["geojson"])
                 # Show outliers in map
