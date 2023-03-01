@@ -30,21 +30,18 @@ class _Settings(BaseSettings):
     MINIO_BUCKET_GEOJSONS: str = None
     MINIO_DATA_FOLDER_NAME: str = None
 
-
     # Sentinel download API
     SENTINEL_HOST: str = "https://scihub.copernicus.eu/dhus"
     SENTINEL_USERNAME: str = ""
     SENTINEL_PASSWORD: str = ""
 
     # Temporal directory
-    TMP_DIR: str = "/home/sandro/PycharmProjects/tmp"
+    TMP_DIR: str = "./tmp"
     TMP_DIR_CUT: str = "/home/sandro/PycharmProjects/tmp/cut"
     TMP_DIR_PNG: str = "/home/sandro/PycharmProjects/tmp/png"
-    TMP_DIR_GEOJSON: str = "/home/sandro/PycharmProjects/geojson"
-
 
     # Directory containing validated datasets (.kmz or .geojson)
-    DB_DIR: str = "/home/sandro/PycharmProjects/geojson"
+    DB_DIR: str = "./geojson"
 
     # For running in a distributed environment
     DASK_CLUSTER_IP: str = "0.0.0.0.0:0000"

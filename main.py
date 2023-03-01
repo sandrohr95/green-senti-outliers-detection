@@ -1,19 +1,14 @@
-# This is a sample Python script.
-from src.productimeseries.utilities.raster import _read_raster
 from src.productimeseries.utilities.utils import _group_polygons_by_tile, get_products_by_tile_and_date, \
     _download_sample_band_from_product_list, _cut_specific_tif, get_products_id_from_mongo, \
     get_time_series_from_products_mongo
 from src.productimeseries.mongo import *
 from src.productimeseries.minio import *
-from sentinelsat.sentinel import read_geojson
-import json
 from datetime import datetime
 import pandas as pd
 import numpy as np
 import os
-import geopandas as gpd
-import matplotlib.pyplot as plt
 import calendar
+import tempfile
 from pathlib import Path
 
 
@@ -86,6 +81,10 @@ def execute_workflow(geojson_name: str, start_date: str, end_date: str, index: s
 
 
 def download_tif_from_minio(geojson_path, geojson_name, index, list_products, timeseries_collection):
+    # create a tmp directory to save TIF from products
+    if not os.path.exists(settings.TMP_DIR):
+        os.mkdir(settings.TMP_DIR)
+
     # Download products in local directory (The user will pass by parameters the index to be downloaded)
     minio_client = MinioConnection()
     # We need to download and process the products than are not in timeseries_collection yet
@@ -102,7 +101,7 @@ def download_tif_from_minio(geojson_path, geojson_name, index, list_products, ti
             _download_sample_band_from_product_list(sample_band_path, title, year, month_name, index, minio_client)
             # We read and cut out the bands for each of the products.
             sample_band_cut_path = str(
-                Path(settings.TMP_DIR_CUT, title + '_' + geojson_name + '_' + index + '.tif'))
+                Path(settings.TMP_DIR, title + '_' + geojson_name + '_' + index + '.tif'))
             raster_result = _cut_specific_tif(geojson_path, sample_band_path, sample_band_cut_path)
             if np.isnan(raster_result).all():
                 print("This product only contains nan values for this index")

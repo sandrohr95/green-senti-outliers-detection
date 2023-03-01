@@ -52,7 +52,7 @@ def save_band_as_png(band_name, band_file: str, output_directory: str):
     """ Save band in .PNG format.
 
     :param band_name: Band name.
-    :param band_file: Band filename in jp2.
+    :param band_file: Band filename.
     :param output_directory: Output directory path.
     """
     with rasterio.open(band_file) as bf:

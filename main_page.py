@@ -215,7 +215,7 @@ def download_specific_tif_from_minio(specific_date: str, outliers: bool):
     # If we found outliers we need to show this overlay image in the map
     if outliers:
         # Convert cut band to PNG format
-        png_path = str(Path(settings.TMP_DIR_PNG,
+        png_path = str(Path(settings.TMP_DIR,
                             last_outlier_date + '_' + st.session_state['geojson'] + '_' + st.session_state[
                                 "index"] + '.png'))
         save_band_as_png(st.session_state["index"], sample_band_cut_path, png_path)

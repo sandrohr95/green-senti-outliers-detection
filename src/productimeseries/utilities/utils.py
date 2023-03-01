@@ -198,7 +198,7 @@ def get_specific_tif_from_minio(name_geojson: str, specific_date: str, index: st
         Download specific TIF from MiniO to show in the Map
     """
     # From GJSON get TILES
-    path_geojson = str(Path(settings.TMP_DIR_GEOJSON, name_geojson + '.geojson'))
+    path_geojson = str(Path(settings.DB_DIR, name_geojson + '.geojson'))
     specific_date = specific_date.split(' ')[0]
     tiles = _group_polygons_by_tile(path_geojson)
     list_tiles = list(tiles.keys())
@@ -222,7 +222,7 @@ def get_specific_tif_from_minio(name_geojson: str, specific_date: str, index: st
     _download_sample_band_from_product_list(sample_band_path, title, year, month_name, index, minio_client)
 
     # We read and cut out the bands for each of the products.
-    sample_band_cut_path = str(Path(settings.TMP_DIR_CUT, title + '_' + name_geojson + '_' + index + '.tif'))
+    sample_band_cut_path = str(Path(settings.TMP_DIR, title + '_' + name_geojson + '_' + index + '.tif'))
     _cut_specific_tif(path_geojson, sample_band_path, sample_band_cut_path)
 
     return sample_band_cut_path
