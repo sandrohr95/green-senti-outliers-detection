@@ -10,8 +10,7 @@ from src.productimeseries.utilities.raster import _read_raster
 from datetime import datetime as dt
 from src.productimeseries.utilities.raster_conversion import save_band_as_png
 from src.productimeseries.mongo import *
-import pandas as pd
-
+import os
 
 def _group_polygons_by_tile(*geojson_files: str) -> dict:
     """
@@ -45,7 +44,7 @@ def get_products_by_tile_and_date(
         mongo_collection: Collection,
         start_date: datetime,
         end_date: datetime,
-        cloud_percentage=100
+        cloud_percentage=0.05
 ) -> Cursor:
     """
     Query to mongo for obtaining products filtered by tile, date and cloud percentage
@@ -61,7 +60,7 @@ def get_products_by_tile_and_date(
                             "as": "index",
                             "cond": {
                                 "$and": [
-                                    {"$eq": ["$$index.mask", None]},
+                                    {"$eq": ["$$index.mask.geojson", "teatinos"]},
                                     {"$eq": ["$$index.name", "cloud-mask"]},
                                     {"$lt": ["$$index.value", cloud_percentage]},
                                 ]
@@ -224,5 +223,10 @@ def get_specific_tif_from_minio(name_geojson: str, specific_date: str, index: st
     # We read and cut out the bands for each of the products.
     sample_band_cut_path = str(Path(settings.TMP_DIR, title + '_' + name_geojson + '_' + index + '.tif'))
     _cut_specific_tif(path_geojson, sample_band_path, sample_band_cut_path)
+
+    # Remove product form tmp folder
+    if os.path.exists(sample_band_path):
+        os.remove(sample_band_path)
+
 
     return sample_band_cut_path

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from main import execute_workflow
 from src.productimeseries.config import settings
-from src.productimeseries.utilities.raster_conversion import _get_corners_raster, save_band_as_png
+from src.productimeseries.utilities.raster_conversion import _get_corners_raster, save_band_as_png, save_tci_rgb_as_png
 from src.productimeseries.utilities.utils import get_specific_tif_from_minio, get_time_series_from_products_mongo
 import numpy as np
 import matplotlib.pyplot as plt
@@ -56,8 +56,8 @@ if "outlier_date" not in st.session_state:
 
 # GENERATE FORM
 with st.sidebar.form(key="my_form"):
-    list_geojson = ['Choose Zone', 'Campo de futbol', 'Bulevar', 'Jardin Botanico']
-    list_index = ['Choose Index', 'ndvi', 'tci', 'ri', 'cri1', 'bri','classifier', 'moisture',
+    list_geojson = ['Choose Zone', 'Teatinos', 'Bulevar', 'Campo de futbol', 'Jardin Botanico']
+    list_index = ['Choose Index', 'ndvi', 'tci', 'ri', 'cri1', 'bri', 'classifier', 'moisture',
                   'evi', 'osavi', 'evi2', 'ndre', 'ndyi', 'bri', 'ndsi', 'ndwi', 'mndwi', 'bsi']
     st.session_state["geojson"] = st.selectbox(
         'Which place do you want to study?',
@@ -95,9 +95,12 @@ with st.sidebar.form(key="my_form"):
 
 # Function to generate a Map Visualization
 def generate_map() -> folium.Map:
-    map_folium = folium.Map(location=st.session_state["center"], zoom_start=18,
-                            tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                            attr='Satellite attribution')
+    map_folium = folium.Map(location=st.session_state["center"], zoom_start=16,
+                            tiles="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+                            attr="Google Satellite",
+                            name="Google Satellite",
+                            show=True
+                            )
     Draw(
         export=True,
         draw_options={
@@ -118,11 +121,10 @@ def generate_map() -> folium.Map:
 
     map_layers_dict = {
         "World Street Map": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-        "Satellite": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         "Google Maps": "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
-        "Google Satellite": "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
         "Google Terrain": 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
-        "Google Satellite Hybrid": 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'
+        "Google Satellite Hybrid": 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+        "Satellite": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
     }
 
     for layer in map_layers_dict:
@@ -132,6 +134,12 @@ def generate_map() -> folium.Map:
             name=layer,
             show=False
         ).add_to(map_folium)
+
+    folium.Marker(
+        location=st.session_state["center"],
+        popup=st.session_state["geojson"],
+    ).add_to(map_folium)
+
     return map_folium
 
 
@@ -154,7 +162,7 @@ def home_page():
         and its evolution in general, through the capture and analysis of satellite images Sentinel-2 of the Copernicus program of the EU. 
         This service will be implemented as a demonstration pilot consisting of a platform with Big Data technology for the collection, consolidation, 
         analysis and data service. Within the scope of the project in terms of time, orientation and budget, the analysis will focus on the campus of 
-        the University of Malaga (Teatinos, Extension of Teatinos and El Ejido).
+        the University of Malaga (Teatinos).
 
         This application has been designed by [Khaos research group](https://khaos.uma.es).
         """
@@ -170,11 +178,11 @@ def execute_outliers_detection():
     n = len(column)
     st.session_state["outlier_date"] = data.index
     # parameters
-    window_percentage = 3
+    window_percentage = 5
     k = int(len(column) * (window_percentage / 100))
     # column = column.to_numpy()
-    get_bands = lambda data: (np.mean(data) + 3 * np.std(data), np.mean(data) - 3 * np.std(data))
-    # get_bands = lambda data: (np.mean(data) + np.nanquantile(data, 0.99), np.mean(data) - np.nanquantile(data, 0.99))
+    get_bands = lambda data: (np.mean(data) + 2.5 * np.std(data), np.mean(data) - 2.5 * np.std(data))
+    # get_bands = lambda data: (np.mean(data) + np.nanquantile(data, 0.98), np.mean(data) - np.nanquantile(data, 0.98))
     bands = [get_bands(column[range(0 if i - k < 0 else i - k, i + k if i + k < n else n)]) for i in range(0, n)]
     st.session_state['upper_detection'], st.session_state['lower_detection'] = zip(*bands)
     # compute local outliers
@@ -245,15 +253,36 @@ def download_specific_tif_from_minio(specific_date: str, outliers: bool):
                             last_outlier_date + '_' + st.session_state['geojson'] + '_' + st.session_state[
                                 "index"] + '.png'))
         save_band_as_png(st.session_state["index"], sample_band_cut_path, png_path)
+
         # fit bounds rasters
         ImageOverlay(
             image=png_path,
             bounds=[[y_min, x_min], [y_max, x_max]],
-            opacity=0.5
+            opacity=0.6,
+            name=st.session_state["index"]).add_to(map_raster)
+
+        # CONVERT TCI BAND TO RGB PNG FORMAT
+        sample_tci_rgb_path = get_specific_tif_from_minio(st.session_state['geojson'],
+                                                          specific_date,
+                                                          'tci')
+        tci_path = str(Path(settings.TMP_DIR,
+                            last_outlier_date + '_' + st.session_state['geojson'] + '_' + st.session_state[
+                                "index"] + '_rgb.png'))
+        save_tci_rgb_as_png(sample_tci_rgb_path, tci_path)
+        ImageOverlay(
+            image=tci_path,
+            bounds=[[y_min, x_min], [y_max, x_max]],
+            opacity=0.8,
+            name="True Color",
+            show=False
         ).add_to(map_raster)
+    folium.LayerControl().add_to(map_raster)
     folium_static(map_raster, height=500, width=700)
+
     return sample_band_cut_path
 
+
+# with st.empty():
 
 # RENDERING CODE
 if st.session_state["warning"]:
@@ -279,7 +308,7 @@ elif not st.session_state.df.empty:
                 st.write("##### Time Series Outlier Detection")
                 # Here we plot time series detection
                 print_outliers_time_series()
-                # isolation_forest_outliers()
+                isolation_forest_outliers()
             with col2:
                 st.write("#### Map Visualization of " + st.session_state["geojson"])
                 # Show outliers in map
@@ -299,7 +328,7 @@ elif not st.session_state.df.empty:
                         st.download_button(
                             label="Download image of " + st.session_state["index"],
                             data=file,
-                            file_name="index.tif",
+                            file_name=st.session_state["index"] + ".tif",
                             mime="image/tif"
                         )
                     st.write("If you want to obtain more information about yo can go to: "

@@ -108,6 +108,7 @@ def download_tif_from_minio(geojson_path, geojson_name, index, list_products, ti
             else:
                 # Calculate the mean of the index for each product
                 raster_result_mean = np.nanmean(raster_result)
+
                 date_mongo = datetime.strptime(year + '-' + str(month) + '-' + day, '%Y-%m-%d')
 
                 """ Insert data in this collection. Example structure:
@@ -137,16 +138,24 @@ def download_tif_from_minio(geojson_path, geojson_name, index, list_products, ti
             print("Something went wrong in the Download")
 
 
+# def delete_documents_mongo(id_geojson):
+#     mongo_client = MongoConnection()
+#     # Establish connection with timeseries_collection
+#     mongo_client.set_collection(settings.MONGO_TIMESERIES_COLLECTION)
+#     timeseries_collection = mongo_client.get_collection_object()
+#     timeseries_collection.delete_many({'id_geojson': id_geojson})
+
+
 if __name__ == '__main__':
-    from statsmodels.tsa.seasonal import seasonal_decompose
-    import matplotlib.dates as mdates
-    import matplotlib.pyplot as plt
+    # delete_documents_mongo("Campo de futbol")
 
-    geojson_files = ['Jardin Botanico']  # , path_geojson+'/Campo de futbol.geojson'
-    indexes = ['ndvi']  # , 'ndvi', 'tci', 'ri', 'cri1', 'bri', 'mndwi'
+    geojson_files = ['Campo de futbol','Jardin Botanico','Bulevar']  # , path_geojson+'/Campo de futbol.geojson'
+    indexes = ['ndvi', 'tci', 'ri', 'cri1', 'bri', 'classifier', 'moisture',
+                  'evi', 'osavi', 'evi2', 'ndre', 'ndyi', 'bri', 'ndsi', 'ndwi', 'mndwi', 'bsi']
 
-    df = execute_workflow(geojson_files[0], "2018-03-26", "2029-02-19", indexes[0])
-    df.sort_index(inplace=True)
-    print(df)
-    df.to_csv("/home/sandro/PycharmProjects/ndvi.csv")
-
+    for g in geojson_files:
+        for i in indexes:
+            execute_workflow(g, "2018-03-26", "2029-02-19", i)
+    # df.sort_index(inplace=True)
+    # print(df)
+    # df.to_csv("/home/sandro/PycharmProjects/ndvi.csv")

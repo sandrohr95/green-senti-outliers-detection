@@ -56,6 +56,8 @@ def save_band_as_png(band_name, band_file: str, output_directory: str):
     :param output_directory: Output directory path.
     """
     with rasterio.open(band_file) as bf:
+        kwargs = bf.meta
+        n_channels = kwargs["count"]
         BAND = bf.read(1).astype(np.float32)
         BAND[BAND == bf.nodata] = np.nan  # Convert NoData to NaN
 
@@ -63,19 +65,40 @@ def save_band_as_png(band_name, band_file: str, output_directory: str):
     fig, ax = plt.subplots(figsize=plt.figaspect(BAND), frameon=False)
     fig.subplots_adjust(0, 0, 1, 1)
 
-    # export to file
-    if band_name.lower() == 'ndvi':
-        vmin, vmax = np.nanpercentile(BAND, (1, 99))  # 1-99% contrast stretch
-        ax.imshow(BAND, cmap='RdYlGn', vmin=vmin, vmax=vmax)
-    elif band_name.lower() == 'classifier':
-        colors_list = ["white", "wheat", "green", "blue"]
-        cmap = colors.ListedColormap(colors_list)
-        vmin, vmax = np.nanpercentile(BAND, (1, 99))  # 1-99% contrast stretch
-        ax.imshow(BAND, cmap=cmap, vmin=vmin, vmax=vmax)
-    else:
-        ax.imshow(BAND)
+    v_min, v_max = np.nanpercentile(BAND, (1, 99))  # 1-99% contrast stretch
+    ax.imshow(BAND, cmap='YlGnBu', vmin=v_min, vmax=v_max)
 
     fig.savefig(output_directory, dpi=120)
-
     # close figure to avoid overflow
     plt.close(fig)
+
+
+def normalize(band):
+    band_min, band_max = (band.min(), band.max())
+    return (band - band_min) / (band_max - band_min)
+
+
+def save_tci_rgb_as_png(band_file: str, output_directory: str):
+    src = rasterio.open(band_file)
+
+    red = src.read(1)
+    red = np.nan_to_num(red)
+    green = src.read(2)
+    green = np.nan_to_num(green)
+    blue = src.read(3)
+    blue = np.nan_to_num(blue)
+
+    red_n = normalize(red)
+    green_n = normalize(green)
+    blue_n = normalize(blue)
+
+    rgb_composite_n = np.dstack((red_n, green_n, blue_n))
+
+    # plot image
+    fig, ax = plt.subplots(figsize=plt.figaspect(rgb_composite_n), frameon=False)
+    fig.subplots_adjust(0, 0, 1, 1)
+    ax.imshow(rgb_composite_n)
+    fig.savefig(output_directory, dpi=120)
+    # close figure to avoid overflow
+    plt.close(fig)
+
