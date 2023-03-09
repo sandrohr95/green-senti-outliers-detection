@@ -83,11 +83,12 @@ sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose-plugin
    ```sh
    git clone https://github.com/sandrohr95/green-senti-outliers-detection.git
    ```
-2. Docker Build
+2. Create .env from .env-template with your own credentials
+3. Docker Build
    ```sh
    docker build --tag streamlit .
    ```
-3. Docker Run
+4. Docker Run
    ```sh
    docker run -p 8051:8051 streamlit
    ```
