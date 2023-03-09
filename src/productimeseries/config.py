@@ -5,7 +5,6 @@ from pydantic import BaseSettings
 
 class _Settings(BaseSettings):
     # Mongo-related settings
-    # Mongo-related settings
     MONGO_HOST: str = "0.0.0.0"
     MONGO_PORT: int = 27017
     MONGO_USERNAME: str = "user"

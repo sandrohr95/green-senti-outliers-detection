@@ -8,9 +8,9 @@ import calendar
 import json
 from src.productimeseries.utilities.raster import _read_raster
 from datetime import datetime as dt
-from src.productimeseries.utilities.raster_conversion import save_band_as_png
 from src.productimeseries.mongo import *
 import os
+
 
 def _group_polygons_by_tile(*geojson_files: str) -> dict:
     """
@@ -95,6 +95,14 @@ def get_products_by_tile_and_date(
     return product_metadata_cursor
 
 
+def get_tile_from_geojson(geojson_path: str) -> str:
+    """ From GJSON get TILES """
+    tiles = _group_polygons_by_tile(geojson_path)
+    list_tiles = list(tiles.keys())
+    tile = list_tiles[0]
+    return tile
+
+
 def get_time_series_from_products_mongo(mongo_collection: Collection, name_geojson: str, index_name: str,
                                         start_date: str, end_date: str):
     """ Get time series index from specific geojson file and a range of dates
@@ -117,7 +125,6 @@ def get_time_series_from_products_mongo(mongo_collection: Collection, name_geojs
             },
         ]
     )
-
 
     return list(timeseries_metadata_cursor)
 
@@ -142,7 +149,6 @@ def get_products_by_tile_and_specific_date(
     """
     Query to mongo for obtaining products filtered by tile, date and then query MiniO to obtain the required TIF to plot it in the map
     """
-    print(specific_date)
     product_cursor = mongo_collection.aggregate(
         [
             {
@@ -192,18 +198,16 @@ def get_products_id_from_mongo(mongo_collection: Collection, start_date: str, en
     return list_products
 
 
-def get_specific_tif_from_minio(name_geojson: str, specific_date: str, index: str):
+def download_specific_tif_from_minio(name_geojson: str, specific_date: str, index: str):
     """
         Download specific TIF from MiniO to show in the Map
     """
     # From GJSON get TILES
     path_geojson = str(Path(settings.DB_DIR, name_geojson + '.geojson'))
-    specific_date = specific_date.split(' ')[0]
-    tiles = _group_polygons_by_tile(path_geojson)
-    list_tiles = list(tiles.keys())
-    tile = list_tiles[0]
+    tile = get_tile_from_geojson(path_geojson)
 
     # Get products ids from MongoDB in products_collection
+    specific_date = specific_date.split(' ')[0]
     mongo_client = MongoConnection()
     mongo_collection = mongo_client.get_collection_object()
     cursor_products = get_products_by_tile_and_specific_date(tile, mongo_collection, specific_date)
@@ -227,6 +231,5 @@ def get_specific_tif_from_minio(name_geojson: str, specific_date: str, index: st
     # Remove product form tmp folder
     if os.path.exists(sample_band_path):
         os.remove(sample_band_path)
-
 
     return sample_band_cut_path

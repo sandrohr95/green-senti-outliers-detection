@@ -1,6 +1,6 @@
-from src.productimeseries.utilities.utils import _group_polygons_by_tile, get_products_by_tile_and_date, \
-    _download_sample_band_from_product_list, _cut_specific_tif, get_products_id_from_mongo, \
-    get_time_series_from_products_mongo
+from src.productimeseries.utilities.utils import _download_sample_band_from_product_list, _cut_specific_tif, \
+    get_products_id_from_mongo, \
+    get_time_series_from_products_mongo, get_tile_from_geojson
 from src.productimeseries.mongo import *
 from src.productimeseries.minio import *
 from datetime import datetime
@@ -8,11 +8,10 @@ import pandas as pd
 import numpy as np
 import os
 import calendar
-import tempfile
 from pathlib import Path
 
 
-def execute_workflow(geojson_name: str, start_date: str, end_date: str, index: str):
+def execute_workflow(geojson_name: str, start_date: str, end_date: str, index: str, tmp_dirname: str):
     """
     Cada vez que un usuario haga una petición se ejecutará el siguiente flujo de trabajo:
     Consultaremos las coleccions de MongoDB (products_collection y timeseries_collection)
@@ -25,21 +24,11 @@ def execute_workflow(geojson_name: str, start_date: str, end_date: str, index: s
     2. Si no encontramos actualización en los datos:
         1.E) Devolvemos la serie temporal completa para mostrarla en Streamlit
 
-    Args:
-        geojson_name:
-        start_date:
-        end_date:
-        index:
-
-    Returns:
-
     """
-    geojson_path = str(Path(settings.DB_DIR, geojson_name + '.geojson'))
 
-    """ From GJSON get TILES """
-    tiles = _group_polygons_by_tile(geojson_path)
-    list_tiles = list(tiles.keys())
-    tile = list_tiles[0]
+    """ From GJSON get TILE """
+    geojson_path = str(Path(settings.DB_DIR, geojson_name + '.geojson'))
+    tile = get_tile_from_geojson(geojson_path)
 
     """ Compare MongoDB collections products_collection and timeseries_collection"""
 
@@ -56,7 +45,8 @@ def execute_workflow(geojson_name: str, start_date: str, end_date: str, index: s
     list_ts = get_time_series_from_products_mongo(timeseries_collection, geojson_name, index, start_date, end_date)
     # Si ese GeoJson aún no existe en MongoDB nos lo descargamos
     if len(list_ts) < 1:
-        download_tif_from_minio(geojson_path, geojson_name, index, list_products, timeseries_collection)
+        generate_time_series_from_products(geojson_path, geojson_name, index, list_products, timeseries_collection,
+                                           tmp_dirname)
 
     # Si ya existe lo actualizamos
     else:
@@ -67,7 +57,8 @@ def execute_workflow(geojson_name: str, start_date: str, end_date: str, index: s
             sublist_products = get_products_id_from_mongo(products_collection, last_ts.strftime("%Y-%m-%d"),
                                                           end_date, tile)
             print("We need to insert " + str(len(sublist_products)) + " products in time series collection")
-            download_tif_from_minio(geojson_path, geojson_name, index, sublist_products, timeseries_collection)
+            generate_time_series_from_products(geojson_path, geojson_name, index, sublist_products,
+                                               timeseries_collection, tmp_dirname)
 
     final_ts_list = get_time_series_from_products_mongo(timeseries_collection, geojson_name, index,
                                                         start_date, end_date)
@@ -80,10 +71,15 @@ def execute_workflow(geojson_name: str, start_date: str, end_date: str, index: s
     return dataframe
 
 
-def download_tif_from_minio(geojson_path, geojson_name, index, list_products, timeseries_collection):
+def generate_time_series_from_products(geojson_path, geojson_name, index, list_products,
+                                       timeseries_collection, tmp_dirname):
+    """
+            From products in MiniO download TIF images and calculate the mean of the index to insert in
+            Time Series Collection
+    """
     # create a tmp directory to save TIF from products
-    if not os.path.exists(settings.TMP_DIR):
-        os.mkdir(settings.TMP_DIR)
+    # if not os.path.exists(settings.TMP_DIR):
+    #     os.mkdir(settings.TMP_DIR)
 
     # Download products in local directory (The user will pass by parameters the index to be downloaded)
     minio_client = MinioConnection()
@@ -97,11 +93,11 @@ def download_tif_from_minio(geojson_path, geojson_name, index, list_products, ti
         month_name = calendar.month_name[month]
         try:
             # Download TIF in local
-            sample_band_path = str(Path(settings.TMP_DIR, title + '_' + index + '.tif'))
+            sample_band_path = str(Path(tmp_dirname, title + '_' + index + '.tif'))
             _download_sample_band_from_product_list(sample_band_path, title, year, month_name, index, minio_client)
             # We read and cut out the bands for each of the products.
             sample_band_cut_path = str(
-                Path(settings.TMP_DIR, title + '_' + geojson_name + '_' + index + '.tif'))
+                Path(tmp_dirname, title + '_' + geojson_name + '_' + index + '.tif'))
             raster_result = _cut_specific_tif(geojson_path, sample_band_path, sample_band_cut_path)
             if np.isnan(raster_result).all():
                 print("This product only contains nan values for this index")
@@ -149,9 +145,9 @@ def download_tif_from_minio(geojson_path, geojson_name, index, list_products, ti
 if __name__ == '__main__':
     # delete_documents_mongo("Campo de futbol")
 
-    geojson_files = ['Campo de futbol','Jardin Botanico','Bulevar']  # , path_geojson+'/Campo de futbol.geojson'
+    geojson_files = ['Campo de futbol', 'Jardin Botanico', 'Bulevar']  # , path_geojson+'/Campo de futbol.geojson'
     indexes = ['ndvi', 'tci', 'ri', 'cri1', 'bri', 'classifier', 'moisture',
-                  'evi', 'osavi', 'evi2', 'ndre', 'ndyi', 'bri', 'ndsi', 'ndwi', 'mndwi', 'bsi']
+               'evi', 'osavi', 'evi2', 'ndre', 'ndyi', 'bri', 'ndsi', 'ndwi', 'mndwi', 'bsi']
 
     for g in geojson_files:
         for i in indexes:

@@ -5,10 +5,7 @@ import pyproj
 import rasterio
 from shapely.geometry import Point
 from shapely.ops import transform
-from matplotlib import pyplot as plt
-from matplotlib import colors
 from src.productimeseries.utilities.raster import _read_raster, _get_kwargs_raster
-
 
 def _get_corners_raster(
         band_path: str,
@@ -48,57 +45,31 @@ def _get_corners_raster(
     )
 
 
-def save_band_as_png(band_name, band_file: str, output_directory: str):
-    """ Save band in .PNG format.
-
-    :param band_name: Band name.
-    :param band_file: Band filename.
-    :param output_directory: Output directory path.
-    """
+def open_band(band_file: str, channel: int = 1):
     with rasterio.open(band_file) as bf:
-        kwargs = bf.meta
-        n_channels = kwargs["count"]
-        BAND = bf.read(1).astype(np.float32)
+        # kwargs = bf.meta
+        # n_channels = kwargs["count"]
+        BAND = bf.read(channel).astype(np.float32)
         BAND[BAND == bf.nodata] = np.nan  # Convert NoData to NaN
-
-    # plot image
-    fig, ax = plt.subplots(figsize=plt.figaspect(BAND), frameon=False)
-    fig.subplots_adjust(0, 0, 1, 1)
-
-    v_min, v_max = np.nanpercentile(BAND, (1, 99))  # 1-99% contrast stretch
-    ax.imshow(BAND, cmap='YlGnBu', vmin=v_min, vmax=v_max)
-
-    fig.savefig(output_directory, dpi=120)
-    # close figure to avoid overflow
-    plt.close(fig)
+    return BAND
 
 
-def normalize(band):
-    band_min, band_max = (band.min(), band.max())
-    return (band - band_min) / (band_max - band_min)
+def normalize_band(band):
+    # mask_nan = band[np.isnan(band)]
+    mask_nan = np.ma.array(band, mask=np.isnan(band))
+    maxi = np.nanmax(mask_nan)
+    mini = np.nanmin(mask_nan)
+    normalized_band = (band - mini) / (maxi - mini)
+    return normalized_band
 
 
-def save_tci_rgb_as_png(band_file: str, output_directory: str):
-    src = rasterio.open(band_file)
-
-    red = src.read(1)
-    red = np.nan_to_num(red)
-    green = src.read(2)
-    green = np.nan_to_num(green)
-    blue = src.read(3)
-    blue = np.nan_to_num(blue)
-
-    red_n = normalize(red)
-    green_n = normalize(green)
-    blue_n = normalize(blue)
-
-    rgb_composite_n = np.dstack((red_n, green_n, blue_n))
-
-    # plot image
-    fig, ax = plt.subplots(figsize=plt.figaspect(rgb_composite_n), frameon=False)
-    fig.subplots_adjust(0, 0, 1, 1)
-    ax.imshow(rgb_composite_n)
-    fig.savefig(output_directory, dpi=120)
-    # close figure to avoid overflow
-    plt.close(fig)
-
+def read_rgb_image(band_path: str):
+    src = rasterio.open(band_path)
+    rgb_src = src.read()
+    rgb = normalize_band(rgb_src)
+    rgb_without_nan = np.nan_to_num(rgb)
+    sum_rgb = np.sum(rgb_without_nan, axis=0)
+    mask = np.where(sum_rgb == 0, 0, 1)
+    rgb_t = np.transpose(rgb_without_nan, (1, 2, 0))
+    index_image = np.dstack((rgb_t, mask))
+    return index_image
