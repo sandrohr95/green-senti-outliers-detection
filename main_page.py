@@ -19,7 +19,6 @@ import tempfile
 
 st.set_page_config(
     page_title="Generate Alerts in Time Series indexes from GeoJson",
-    page_icon=":world_map:️",
     layout="wide"
 )
 st.sidebar.title('Alerts Form')
@@ -159,6 +158,7 @@ def plot_specific_tif_from_minio(specific_date: str, outliers: bool):
             bounds=[[y_min, x_min], [y_max, x_max]],
             opacity=0.8,
             colormap=cmap,
+            name="True color",
             show=False
         ).add_to(map_raster)
     folium.LayerControl().add_to(map_raster)

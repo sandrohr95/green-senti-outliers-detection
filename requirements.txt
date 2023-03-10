@@ -14,8 +14,8 @@ matplotlib==3.5.3
 #streamlit~=1.12.2
 streamlit
 streamlit-folium
-GDAL
 scrapy
 mpld3~=0.5.7
 folium
 python-dotenv
+scikit-learn
