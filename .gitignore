@@ -1,0 +1,9 @@
+# Environments
+.env
+.idea
+
+# Cache
+__pycache__/
+
+# Tmp files
+tmp/
