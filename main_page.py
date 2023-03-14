@@ -8,7 +8,8 @@ from streamlit_folium import folium_static
 import shutil
 from main import execute_workflow
 import os
-from src.productimeseries.utilities.raster_conversion import _get_corners_raster, open_band, normalize_band, read_rgb_image
+from src.productimeseries.utilities.raster_conversion import _get_corners_raster, open_band, normalize_band, \
+    read_rgb_image
 from src.productimeseries.utilities.utils import download_specific_tif_from_minio
 from src.productimeseries.utilities.streamlit_download_button import download_button
 import numpy as np
@@ -18,7 +19,6 @@ from sklearn.ensemble import IsolationForest
 import tempfile
 
 st.set_page_config(
-    page_title="Generate Alerts in Time Series indexes from GeoJson",
     layout="wide"
 )
 st.sidebar.title('Alerts Form')
@@ -56,29 +56,27 @@ def generate_map(center_location=None) -> folium.Map:
                             name="Google Satellite",
                             show=True
                             )
-    Draw(
-        export=True,
-        draw_options={
-            "circle": False,
-            "marker": False,
-            "circlemarker": False,
-            "polyline": False,
-            "polygon": {
-                "allowIntersection": False,
-                "showArea": True
-            }
-        }
-    ).add_to(map_folium)
+    # Draw(
+    #     export=True,
+    #     draw_options={
+    #         "circle": False,
+    #         "marker": False,
+    #         "circlemarker": False,
+    #         "polyline": False,
+    #         "polygon": {
+    #             "allowIntersection": False,
+    #             "showArea": False
+    #         }
+    #     }
+    # ).add_to(map_folium)
     Fullscreen().add_to(map_folium)
-    LocateControl().add_to(map_folium)
-    MousePosition().add_to(map_folium)
-    MeasureControl("bottomleft").add_to(map_folium)
+    # LocateControl().add_to(map_folium)
+    # MousePosition().add_to(map_folium)
+    # MeasureControl("bottomleft").add_to(map_folium)
 
     map_layers_dict = {
         "World Street Map": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
         "Google Maps": "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
-        "Google Terrain": 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
-        "Google Satellite Hybrid": 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
         "Satellite": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
     }
 
@@ -89,12 +87,6 @@ def generate_map(center_location=None) -> folium.Map:
             name=layer,
             show=False
         ).add_to(map_folium)
-
-    folium.Marker(
-        location=center_location,
-        popup=st.session_state["geojson"],
-    ).add_to(map_folium)
-
     return map_folium
 
 
@@ -166,15 +158,15 @@ def plot_specific_tif_from_minio(specific_date: str, outliers: bool):
     return band_cut_path
 
 
-# RENDERING CODE
-home = st.empty()
-with home.container():
+def home_page():
     # HOME PAGE
+    """ # Generate Alerts in Time Series indexes from GeoJson """
+
     home1, home2 = st.columns(2)
     with home1:
         "## Start Exploring"
         """
-        Currently, there are two functions defined:
+        Currently, there are two parameters defined:
 
         - `Select Area of Interest`: In this version of the application the user will be able to study different areas of the Teatinos campus of the University of Malaga.
 
@@ -188,12 +180,127 @@ with home.container():
         This service will be implemented as a demonstration pilot consisting of a platform with Big Data technology for the collection, consolidation, 
         analysis and data service. Within the scope of the project in terms of time, orientation and budget, the analysis will focus on the campus of 
         the University of Malaga (Teatinos).
+        
+        The outlier detection approach is based on statistical models, which provide a more controlled and 
+        explainable outcome by calculating statistical values based on the median moving average of the historical 
+        data and using a standard deviation to create a band of statistical importance. In this regard, this method 
+        defines the uppermost and lowermost bound, and anything falling beyond these ranges can be an anomaly. This 
+        is very effective for highly volatile time series indexes of green-senti.
 
         This application has been designed by [Khaos research group](https://khaos.uma.es).
         """
+
     with home2:
         map_static = generate_map()
         folium_static(map_static, height=500, width=700)
+
+
+def page_outlier_detection():
+    """ # Generate Alerts in Time Series indexes from GeoJson """
+    # Home page redirection
+    st.button("Home Page", on_click=redirect_home())
+
+    with st.spinner('Outlier Detection Wait for it...'):
+        # Create a temp folder to save results
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            print('created temporary directory', tmp_dirname)
+
+        # execute workflow
+        dataframe = _execute_complete_workflow(st.session_state["geojson"],
+                                               st.session_state["start_date"],
+                                               st.session_state["end_date"],
+                                               st.session_state["index"],
+                                               tmp_dirname)
+        tempfile.TemporaryDirectory().cleanup()
+        # First Detect Outliers OUTLIER DETECTION
+        column = dataframe[st.session_state['index']]
+        n = len(column)
+        outlier_date = dataframe.index
+        window_percentage = 5
+        k = int(len(column) * (window_percentage / 100))
+        get_bands = lambda data: (np.mean(data) + 2.5 * np.std(data), np.mean(data) - 2.5 * np.std(data))
+        # get_bands = lambda data: (np.mean(data) + np.nanquantile(data, 0.98), np.mean(data) - np.nanquantile(data, 0.98))
+        bands = [get_bands(column[range(0 if i - k < 0 else i - k, i + k if i + k < n else n)]) for i in
+                 range(0, n)]
+        upper_detection, lower_detection = zip(*bands)
+        # compute local outliers
+        anomalies = (column > upper_detection) | (
+                column < lower_detection)
+
+        # If outlier exist download last TIF outlier if not, download the last TIF os the time series
+        col1, col2 = st.columns(2)
+        if np.any(anomalies):
+            # if outliers, download the TIF from this date to generate center map and show index image
+            last_outlier_date = str(outlier_date[anomalies][0])
+            number_of_outliers = len(outlier_date[anomalies])
+            with col1:
+                st.write('#### Time Series Visualization')
+                st.line_chart(dataframe, height=280)
+                st.error('We detect ' + str(
+                    number_of_outliers) + ' outliers. The last one was: ' + last_outlier_date,
+                         icon="🚨")
+                st.write("##### Time Series Outlier Detection")
+
+                # PLOT TIME SERIES DETECTION
+                fig = plt.figure(figsize=(28, 10))
+                plt.xticks(fontsize=24)
+                plt.yticks(fontsize=24)
+                plt.plot(outlier_date, column, 'k', label=st.session_state['index'])
+                plt.plot(outlier_date, upper_detection, 'r-', label='Bands',
+                         alpha=0.5)
+                plt.plot(outlier_date, lower_detection, 'r-', alpha=0.5)
+                plt.plot(outlier_date[anomalies],
+                         column[anomalies], 'ro',
+                         label='Anomalies')
+                plt.fill_between(outlier_date, upper_detection,
+                                 lower_detection,
+                                 facecolor='red', alpha=0.1)
+                plt.legend(fontsize=24)
+                st.pyplot(fig)
+                # ANOTHER DETECTION METHOD
+                # isolation_forest_outliers(dataframe)
+            with col2:
+                st.write("#### Map Visualization of " + st.session_state["geojson"])
+                # Show outliers in map
+                sample_band_cut_path = plot_specific_tif_from_minio(last_outlier_date, outliers=True)
+                # Explanation of the results
+                with st.expander("Get More Information"):
+                    "###### Statistical Information"
+                    st.write("The last outlier was the day: " + last_outlier_date)
+                    st.write('Number of outliers: ' + str(number_of_outliers))
+                    "###### Download Image"
+                    st.write(
+                        "You can download the index of the last outlier found in the time series analysis in the "
+                        "button below: ")
+
+                    # Load selected file
+                    with open(sample_band_cut_path, 'rb') as f:
+                        s = f.read()
+                    download_button_str = download_button(s, sample_band_cut_path,
+                                                          f'Click here to download {st.session_state["index"]}')
+                    st.markdown(download_button_str, unsafe_allow_html=True)
+                    st.write("If you want to obtain more information about yo can go to: "
+                             "*https://khaos.uma.es/green-senti/explore* ")
+
+        # if not outliers we download the last TIF in time series to generate the center map
+        else:
+            with col1:
+                st.write('#### Time Series Visualization')
+                st.line_chart(dataframe, height=280)
+                st.write("##### Time Series Outlier Detection")
+                st.info(
+                    "Fortunately, no anomaly has been found in this area of " + st.session_state['geojson'] +
+                    " for the selected index:  " + st.session_state['index'], icon="ℹ️")
+            with col2:
+                st.write("#### Map Visualization of " + st.session_state["geojson"])
+                last_date_time_series = str(dataframe.index[0])
+                # cut TIF image with the selected geojson and get the coordinates of the TIF
+                sample_band_cut_path = plot_specific_tif_from_minio(last_date_time_series, outliers=False)
+
+    # DELETE TEMPORARY FOLDER AND ALL ITS CONTENTS
+    if os.path.exists(tmp_dirname):
+        shutil.rmtree(tmp_dirname)
+
 
 # GENERATE FORM
 with st.sidebar.form(key="my_form"):
@@ -208,112 +315,22 @@ with st.sidebar.form(key="my_form"):
         'Which index do you want to study?',
         list_index
     )
-
     submit_button = st.form_submit_button(label="Detect Outliers", help="Execute Outliers Detection")
+
+
+def redirect_home():
+    st.session_state["run_page"] = home_page
+
 
 # SUBMIT BUTTON
 if submit_button:
     if st.session_state["geojson"] == 'Choose Zone' or st.session_state["index"] == 'Choose Index':
         st.warning("WARNING: Please enter the required fields", icon="⚠️")
+        st.session_state["run_page"] = home_page
     else:
-        with st.spinner('Outlier Detection Wait for it...'):
-            # if everything goes correctly remove home page and execute workflow
-            home.empty()
-            # Create a temp folder to save results
-            with tempfile.TemporaryDirectory() as tmp_dirname:
-                print('created temporary directory', tmp_dirname)
+        st.session_state["run_page"] = page_outlier_detection
 
-            # execute workflow
-            dataframe = _execute_complete_workflow(st.session_state["geojson"],
-                                                   st.session_state["start_date"],
-                                                   st.session_state["end_date"],
-                                                   st.session_state["index"],
-                                                   tmp_dirname)
-            tempfile.TemporaryDirectory().cleanup()
-            # First Detect Outliers OUTLIER DETECTION
-            column = dataframe[st.session_state['index']]
-            n = len(column)
-            outlier_date = dataframe.index
-            window_percentage = 5
-            k = int(len(column) * (window_percentage / 100))
-            get_bands = lambda data: (np.mean(data) + 2.5 * np.std(data), np.mean(data) - 2.5 * np.std(data))
-            # get_bands = lambda data: (np.mean(data) + np.nanquantile(data, 0.98), np.mean(data) - np.nanquantile(data, 0.98))
-            bands = [get_bands(column[range(0 if i - k < 0 else i - k, i + k if i + k < n else n)]) for i in
-                     range(0, n)]
-            upper_detection, lower_detection = zip(*bands)
-            # compute local outliers
-            anomalies = (column > upper_detection) | (
-                    column < lower_detection)
-
-            # If outlier exist download last TIF outlier if not, download the last TIF os the time series
-            col1, col2 = st.columns(2)
-            if np.any(anomalies):
-                # if outliers, download the TIF from this date to generate center map and show index image
-                last_outlier_date = str(outlier_date[anomalies][0])
-                number_of_outliers = len(outlier_date[anomalies])
-                with col1:
-                    st.write('#### Time Series Visualization')
-                    st.line_chart(dataframe, height=280)
-                    st.error('We detect ' + str(
-                        number_of_outliers) + ' outliers. The last one was: ' + last_outlier_date,
-                             icon="🚨")
-                    st.write("##### Time Series Outlier Detection")
-
-                    # PLOT TIME SERIES DETECTION
-                    fig = plt.figure(figsize=(28, 10))
-                    plt.xticks(fontsize=24)
-                    plt.yticks(fontsize=24)
-                    plt.plot(outlier_date, column, 'k', label=st.session_state['index'])
-                    plt.plot(outlier_date, upper_detection, 'r-', label='Bands',
-                             alpha=0.5)
-                    plt.plot(outlier_date, lower_detection, 'r-', alpha=0.5)
-                    plt.plot(outlier_date[anomalies],
-                             column[anomalies], 'ro',
-                             label='Anomalies')
-                    plt.fill_between(outlier_date, upper_detection,
-                                     lower_detection,
-                                     facecolor='red', alpha=0.1)
-                    plt.legend(fontsize=24)
-                    st.pyplot(fig)
-                    # ANOTHER DETECTION METHOD
-                    isolation_forest_outliers(dataframe)
-                with col2:
-                    st.write("#### Map Visualization of " + st.session_state["geojson"])
-                    # Show outliers in map
-                    sample_band_cut_path = plot_specific_tif_from_minio(last_outlier_date, outliers=True)
-                    # Explanation of the results
-                    with st.expander("Get More Information"):
-                        "###### Statistical Information"
-                        st.write("The last outlier was the day: " + last_outlier_date)
-                        st.write('Number of outliers: ' + str(number_of_outliers))
-                        "###### Download Image"
-                        st.write(
-                            "You can download the index of the last outlier found in the time series analysis in the "
-                            "button below: ")
-
-                        # Load selected file
-                        with open(sample_band_cut_path, 'rb') as f:
-                            s = f.read()
-                        download_button_str = download_button(s, sample_band_cut_path, f'Click here to download {st.session_state["index"]}')
-                        st.markdown(download_button_str, unsafe_allow_html=True)
-                        st.write("If you want to obtain more information about yo can go to: "
-                                 "*https://khaos.uma.es/green-senti/explore* ")
-
-            # if not outliers we download the last TIF in time series to generate the center map
-            else:
-                with col1:
-                    st.write('#### Time Series Visualization')
-                    st.line_chart(dataframe, height=280)
-                    st.write("##### Time Series Outlier Detection")
-                    st.info(
-                        "Fortunately, no anomaly has been found in this area of " + st.session_state['geojson'] +
-                        " for the selected index:  " + st.session_state['index'], icon="ℹ️")
-                with col2:
-                    st.write("#### Map Visualization of " + st.session_state["geojson"])
-                    last_date_time_series = str(dataframe.index[0])
-                    # cut TIF image with the selected geojson and get the coordinates of the TIF
-                    sample_band_cut_path = plot_specific_tif_from_minio(last_date_time_series, outliers=False)
-
-        # DELETE TEMPORARY FOLDER AND ALL ITS CONTENTS
-        if os.path.exists(tmp_dirname):
-            shutil.rmtree(tmp_dirname)
+# RENDERING MULTI-PAGES
+if "run_page" not in st.session_state:
+    st.session_state["run_page"] = home_page
+st.session_state["run_page"]()

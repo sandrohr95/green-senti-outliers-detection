@@ -14,4 +14,4 @@ COPY . /app
 
 HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
 
-ENTRYPOINT ["streamlit", "run", "main_page.py", "--server.port=8051", "--server.address=0.0.0.0", "--server.baseUrlPath=/green-senti-outlier-detection"]
+ENTRYPOINT ["streamlit", "run", "main_page.py", "--server.port=8051", "--server.address=0.0.0.0", "--server.baseUrlPath=/green-senti/outlier-detection"]
